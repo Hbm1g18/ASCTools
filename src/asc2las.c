@@ -141,7 +141,7 @@ int main(int argc, char *argv[]) {
                 fclose(las_file);
                 return 1;
             }
-            if ((int)z_value == nodata_value) {
+            if ((int)z_value == nodata_value || (nodata_value != -9999 && (int)z_value == -9999)) {
                 current_x += cellsize_value;
                 continue;
             }
