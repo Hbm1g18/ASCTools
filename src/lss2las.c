@@ -2,7 +2,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdint.h>
-#include <libgen.h>
+#include <ctype.h>
 #include <errno.h>
 #include <math.h>
 
@@ -68,6 +68,7 @@ void viridis_colormap(double normalized, uint16_t *red, uint16_t *green, uint16_
     if (normalized < 0.0) normalized = 0.0;
     if (normalized > 1.0) normalized = 1.0;
 
+    // Colour ramp using viridis if -elev_rgb is used to try and add a bit of colour to clouds
     if (normalized <= 0.25) {
         r = 0.267 + normalized * 4.0 * (0.282 - 0.267);
         g = 0.004 + normalized * 4.0 * (0.141 - 0.004);
@@ -96,7 +97,7 @@ void viridis_colormap(double normalized, uint16_t *red, uint16_t *green, uint16_
 
 int main(int argc, char *argv[]) {
     if (argc < 2) {
-        fprintf(stderr, "Usage: %s <input.asc> [-elev_rgb]\n", argv[0]);
+        fprintf(stderr, "Usage: %s <input.00{x}> [-elev_rgb]\n", argv[0]);
         return 1;
     }
 
@@ -122,7 +123,7 @@ int main(int argc, char *argv[]) {
     header.version_major = 1;
     header.version_minor = 2;
     strncpy(header.system_identifier, "SYSTEM_XYZ", 32);
-    strncpy(header.generating_software, "ASCTOOLS GENERATOR", 32);
+    strncpy(header.generating_software, "LSS2LAS GENERATOR", 32);
     header.file_creation_day = 300;
     header.file_creation_year = 2024;
     header.header_size = sizeof(LASHeader);
@@ -146,84 +147,86 @@ int main(int argc, char *argv[]) {
     fwrite(&header, sizeof(LASHeader), 1, las_file);
 
     char line[255];
-    int nrows_value, ncols_value, nodata_value;
-    float xllcorner_value, yllcorner_value, cellsize_value;
+    double min_x = 9999999, max_x = -9999999;
+    double min_y = 9999999, max_y = -9999999;
+    double min_z = 9999999, max_z = -9999999;
+    int point_counter = 0;
 
-    for (int i = 0; i < 6; i++) {
-        fgets(line, sizeof(line), fp);
-        if (strstr(line, "nrows")) sscanf(line, "%*s %d", &nrows_value);
-        else if (strstr(line, "ncols")) sscanf(line, "%*s %d", &ncols_value);
-        else if (strstr(line, "xllcorner")) sscanf(line, "%*s %f", &xllcorner_value);
-        else if (strstr(line, "yllcorner")) sscanf(line, "%*s %f", &yllcorner_value);
-        else if (strstr(line, "cellsize")) sscanf(line, "%*s %f", &cellsize_value);
-        else if (strstr(line, "nodata_value")) sscanf(line, "%*s %d", &nodata_value);
+    while (fgets(line, sizeof(line), fp)) {
+        char *newline = strchr(line, '\n');
+        if (newline) *newline = '\0';
+
+        if (strncmp(line, "21", 2) != 0) continue;
+
+        char clean_line[255] = "";
+        char *src = line, *dest = clean_line;
+        while (*src) {
+            if (!isspace((unsigned char)*src)) {
+                *dest++ = *src;
+            }
+            src++;
+        }
+        *dest = '\0';
+
+        char *fields[5];
+        int field_count = 0;
+        char *token = strtok(clean_line, ",");
+        while (token != NULL && field_count < 5) {
+            fields[field_count++] = token;
+            token = strtok(NULL, ",");
+        }
+
+        if (field_count < 5) continue;
+
+        double x = atof(fields[2]);
+        double y = atof(fields[3]);
+        double z = atof(fields[4]);
+
+        if (x < min_x) min_x = x;
+        if (x > max_x) max_x = x;
+        if (y < min_y) min_y = y;
+        if (y > max_y) max_y = y;
+        if (z < min_z) min_z = z;
+        if (z > max_z) max_z = z;
+
+        point.x = (int32_t)(x / 0.01);
+        point.y = (int32_t)(y / 0.01);
+        point.z = (int32_t)(z / 0.01);
+        point.intensity = 100;
+        point.return_number = 1;
+        point.number_of_returns = 1;
+        point.classification = 2;
+        point.point_source_id = 1;
+
+        if (use_elevation_color) {
+            double normalized = (z - min_z) / (max_z - min_z);
+            viridis_colormap(normalized, &point.red, &point.green, &point.blue);
+        } else {
+            point.red = point.green = point.blue = 0;
+        }
+
+        fwrite(&point, sizeof(LASPointFormat2), 1, las_file);
+        point_counter++;
     }
 
-    header.min_x = xllcorner_value;
-    header.min_y = yllcorner_value;
-    header.max_x = xllcorner_value + (ncols_value * cellsize_value);
-    header.max_y = yllcorner_value + (nrows_value * cellsize_value);
-
+    header.num_point_records = point_counter;
+    header.min_x = min_x;
+    header.max_x = max_x;
+    header.min_y = min_y;
+    header.max_y = max_y;
+    header.min_z = min_z;
+    header.max_z = max_z;
     header.x_scale_factor = 0.01;
     header.y_scale_factor = 0.01;
     header.z_scale_factor = 0.01;
 
-    double min_z = 9999999, max_z = -9999999;
-    float current_x, current_y;
-    current_y = yllcorner_value + nrows_value * cellsize_value;
-
-    int point_counter = 0;
-    for (int row = 0; row < nrows_value; row++) {
-        current_x = xllcorner_value;
-        for (int col = 0; col < ncols_value; col++) {
-            float z_value;
-            if (fscanf(fp, "%f", &z_value) != 1) {
-                fprintf(stderr, "Error reading data at row %d, col %d\n", row, col);
-                fclose(fp);
-                fclose(las_file);
-                return 1;
-            }
-            if ((int)z_value == nodata_value || (nodata_value != -9999 && (int)z_value == -9999)) {
-                current_x += cellsize_value;
-                continue;
-            }
-
-            if (z_value < min_z) min_z = z_value;
-            if (z_value > max_z) max_z = z_value;
-
-            point.x = (int32_t)(current_x / header.x_scale_factor);
-            point.y = (int32_t)(current_y / header.y_scale_factor);
-            point.z = (int32_t)(z_value / header.z_scale_factor);
-            point.intensity = 100;
-            point.return_number = 1;
-            point.number_of_returns = 1;
-            point.classification = 2;
-            point.point_source_id = 1;
-
-            if (use_elevation_color) {
-                double normalized = (z_value - min_z) / (max_z - min_z);
-                viridis_colormap(normalized, &point.red, &point.green, &point.blue);
-            } else {
-                point.red = point.green = point.blue = 0;
-            }
-
-            fwrite(&point, sizeof(LASPointFormat2), 1, las_file);
-            point_counter++;
-            current_x += cellsize_value;
-        }
-        current_y -= cellsize_value;
-    }
-
-    header.num_point_records = point_counter;
-    header.min_z = min_z;
-    header.max_z = max_z;
-
     fseek(las_file, 0, SEEK_SET);
     fwrite(&header, sizeof(LASHeader), 1, las_file);
 
-    printf("Conversion complete: '%s' -> '%s'. Total points: %d\n", input_file, output_file, point_counter);
+    printf("Conversion complete. Output file: %s. Total points: %d\n", output_file, point_counter);
 
     fclose(fp);
     fclose(las_file);
+
     return 0;
 }
