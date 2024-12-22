@@ -11,7 +11,9 @@ void print_help() {
     printf("| `lss2csv`       | `Usage: lss2csv <input.00{x}>`                                                                    |\n");
     printf("| `lss2boundary`  | `Usage: lss2boundary <input.00{x}>`                                                               |\n");
     printf("| `lss2json`      | `Usage: lss2json <input.00{x}>`                                                                   |\n");
-    printf("| `lss2dxflines`  | `Usage: lss2dxflines <input.00{x}>`                                                               |\n");
+    printf("| `lss2dxflines`  | `Usage: lss2dxflines <input.00{x}> [--one-code {x}] [--list-codes {x},{y}{z}]`                    |\n");
+    printf("|                 | [--one-code] generates a dxf output with only that feature code present.                          |\n");
+    printf("|                 | [--list-codes] generates a dxf output from a comma delimited list of feature codes.               |\n");
     printf("| `lss2las`       | `Usage: lss2las <input.00{x}> [-elev_rgb]` (Optional generation of rgb values based on elevation) |\n");
 }
 

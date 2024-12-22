@@ -24,5 +24,7 @@ These files store point/line information and the tools aim to ease use of these 
 | `lss2boundary`  | `Usage: lss2boundary <input.00{x}>`                                                  |
 | `lss2json`      | `Usage: lss2json <input.00{x}>`                                                      |
 | `lss2dxflines`  | `Usage: lss2dxflines <input.00{x}>`                                                  |
+|                 | [--one-code] generates a dxf output with only that feature code present.             |
+|                 | [--list-codes] generates a dxf output from a comma delimited list of feature codes.  |
 | `lss2las`       | `Usage: lss2las <input.00{x}> [-elev_rgb]` (Optional generation of rgb values based on elevation) |
 

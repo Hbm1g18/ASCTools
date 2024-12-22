@@ -31,13 +31,38 @@ void generate_output_filename(const char *input_filename, char *output_filename)
     }
 }
 
+int feature_in_list(const char *feature_code, char **list, int list_count) {
+    for (int i = 0; i < list_count; i++) {
+        if (strcmp(feature_code, list[i]) == 0) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
 int main(int argc, char *argv[]) {
-    if (argc != 2) {
-        fprintf(stderr, "Usage: %s <input_file>\n", argv[0]);
+    if (argc < 2) {
+        fprintf(stderr, "Usage: %s <input_file> [--one-code {x}] [--list-codes {x},{y},{z}]\n", argv[0]);
         return EXIT_FAILURE;
     }
 
     const char *input_filename = argv[1];
+    char *one_code = NULL;
+    char *list_codes[MAX_FEATURES];
+    int list_count = 0;
+
+    // Parse additional arguments
+    for (int i = 2; i < argc; i++) {
+        if (strcmp(argv[i], "--one-code") == 0 && i + 1 < argc) {
+            one_code = argv[++i];
+        } else if (strcmp(argv[i], "--list-codes") == 0 && i + 1 < argc) {
+            char *token = strtok(argv[++i], ",");
+            while (token != NULL && list_count < MAX_FEATURES) {
+                list_codes[list_count++] = token;
+                token = strtok(NULL, ",");
+            }
+        }
+    }
 
     char output_filename[256];
     generate_output_filename(input_filename, output_filename);
@@ -133,6 +158,13 @@ int main(int argc, char *argv[]) {
     }
 
     for (int i = 0; i < feature_count; i++) {
+        if (one_code && strcmp(features[i].code, one_code) != 0) {
+            continue;
+        }
+        if (list_count > 0 && !feature_in_list(features[i].code, list_codes, list_count)) {
+            continue;
+        }
+
         fprintf(output_file, "0\nPOLYLINE\n");
         fprintf(output_file, "8\n%s\n", features[i].code);
         fprintf(output_file, "66\n1\n");
@@ -154,7 +186,6 @@ int main(int argc, char *argv[]) {
     }
 
     fprintf(output_file, "0\nENDSEC\n");
-
     fprintf(output_file, "0\nEOF\n");
 
     fclose(input_file);
