@@ -19,6 +19,8 @@ These files store point/line information and the tools aim to ease use of these 
 | `asc2csv`       | `Usage: asc2csv <input.asc>`                                                         |
 | `asc2las`       | `Usage: asc2las <input.asc> [-elev_rgb]` (Optional generation of rgb values based on elevation) |
 | `asc2tif`       | `Usage: asc2tif <input.asc> <epsg_code>`                                             |
+| `asc2pointgrid` | `Usage: asc2pointgrid <input.asc> [-spacing {x}]`                                    |
+|                 |  `Outputs a dxf file with spot levels plotted as a grid. Optional spacing arg`       |
 | `lssinfo`       | `Usage: lssinfo <input.00{x}>`                                                       |
 | `lss2csv`       | `Usage: lss2csv <input.00{x}>`                                                       |
 | `lss2boundary`  | `Usage: lss2boundary <input.00{x}>`                                                  |
