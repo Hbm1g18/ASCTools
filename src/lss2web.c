@@ -31,9 +31,14 @@ int main(int argc, char *argv[]) {
 
     const char *input_filename = argv[1];
     int include_google_earth = 0;
+    int include_points = 0;
 
-    if (argc == 3 && strcmp(argv[2], "-ge") == 0) {
-        include_google_earth = 1;
+    for (int i = 2; i < argc; i++) {
+        if (strcmp(argv[i], "-ge") == 0) {
+            include_google_earth = 1;
+        } else if (strcmp(argv[i], "-points") == 0) {
+            include_points = 1;
+        }
     }
 
     char output_filename[256];
@@ -93,6 +98,9 @@ int main(int argc, char *argv[]) {
     }
 
     fprintf(output_file, "      const linesLayer = L.layerGroup();\n");
+    if (include_points){
+        fprintf(output_file, "      const pointsLayer = L.layerGroup();\n");
+    }
 
     fprintf(output_file, "      const baseLayers = {\n");
     fprintf(output_file, "        'OpenStreetMap': osmLayer,\n");
@@ -105,6 +113,9 @@ int main(int argc, char *argv[]) {
 
     fprintf(output_file, "      const overlayLayers = {\n");
     fprintf(output_file, "        'Lines': linesLayer,\n");
+    if (include_points){
+        fprintf(output_file, "        'Points': pointsLayer,\n");
+    }
     fprintf(output_file, "      };\n");
 
     fprintf(output_file, "      L.control.layers(baseLayers, overlayLayers).addTo(map);\n");
@@ -160,6 +171,55 @@ int main(int argc, char *argv[]) {
     }
 
     fprintf(output_file, "      linesLayer.addTo(map);\n");
+
+    if (include_points){
+        char line[MAX_LINE_LENGTH];
+        float min_z = 999999, max_z = -999999;
+
+        rewind(input_file);
+
+        fprintf(output_file, "const points = [\n");
+        while (fgets(line, sizeof(line), input_file)) {
+            char *parts[NUM_PARTS];
+            int part_count = 0;
+            char *token = strtok(line, ", ");
+            while (token != NULL && part_count < NUM_PARTS) {
+                parts[part_count++] = token;
+                token = strtok(NULL, ", ");
+            }
+
+            if (part_count == NUM_PARTS) {
+                float x = atof(parts[2]);
+                float y = atof(parts[3]);
+                float z = atof(parts[4]);
+                if (x == 0.0 ) {
+                    continue; 
+                }
+                if (z < min_z) min_z = z;
+                if (z > max_z) max_z = z;
+                fprintf(output_file, "  {lat: %f, lng: %f, z: %f},\n", y, x, z);
+            }
+        }
+        fprintf(output_file, "];\n");
+
+        fprintf(output_file, "const minZ = Math.min(...points.map(p => p.z));\n");
+        fprintf(output_file, "const maxZ = Math.max(...points.map(p => p.z));\n");
+        fprintf(output_file, "function getColor(z) {\n");
+        fprintf(output_file, "    const normalized = (z - minZ) / (maxZ - minZ);\n");
+        fprintf(output_file, "    const hue = (1 - normalized) * 240;\n");
+        fprintf(output_file, "    return `hsl(${hue}, 100%%, 50%%)`;\n");
+        fprintf(output_file, "}\n");
+
+        fprintf(output_file, "points.forEach(p => {\n");
+        fprintf(output_file, "    const transformed = proj4('EPSG:27700', 'EPSG:4326', [p.lng, p.lat]);\n");
+        fprintf(output_file, "    p.lat = transformed[1];\n    p.lng = transformed[0];\n");
+        fprintf(output_file, "    const marker = L.circleMarker([p.lat, p.lng], { radius: 1, color: getColor(p.z) });\n");
+        fprintf(output_file, "    marker.bindPopup(`Elevation: ${p.z} m`).openPopup();\n");
+        fprintf(output_file, "    pointsLayer.addLayer(marker);\n");
+        fprintf(output_file, "});\n");
+
+        fprintf(output_file, "      pointsLayer.addTo(map);\n");
+    }
 
     fprintf(output_file, "    </script>\n");
     fprintf(output_file, "</body>\n");
